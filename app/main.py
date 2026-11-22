@@ -121,7 +121,7 @@ class TemporaryBackupResponse(FileResponse):
 @app.get("/api/backup")
 def download_backup():
     source_path = (Path(os.getenv("CHAT_DATA_DIR", "data")) / "chat.sqlite3").resolve()
-    directory = Path(tempfile.mkdtemp(prefix="local-chat-backup-"))
+    directory = Path(tempfile.mkdtemp(prefix="flowchat-backup-"))
     temporary = directory / "backup.sqlite3"
     try:
         # Read-only opening avoids creating or changing the live database; SQLite's
@@ -134,7 +134,7 @@ def download_backup():
         return TemporaryBackupResponse(
             temporary,
             media_type="application/vnd.sqlite3",
-            filename=f"local-chat-backup-{timestamp}.sqlite3",
+            filename=f"flowchat-backup-{timestamp}.sqlite3",
             headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
         )
     except Exception:

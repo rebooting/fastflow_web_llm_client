@@ -1,14 +1,20 @@
-# Local Chat
+# FlowChat for FastFlowLM
 
-I created Local Chat because I couldn't find a web interface or desktop client that did what I wanted. It provides a local chat interface for an OpenAI-compatible FastFlowLM server.
+I created FlowChat because I couldn't find a web interface or desktop client that did what I wanted. It provides a local chat interface for an OpenAI-compatible FastFlowLM server.
 
-Chat history, settings, and prompt presets are stored in a SQLite database on the machine running the app. Your browser communicates with the app through its `/api` routes, and the app communicates with FastFlowLM.
+Chat history, settings, and prompt presets are stored in a SQLite database on the machine running the app. Your browser communicates with the app through its `/api` routes, and the app communicates with the configured model server.
 
 I tested it on a Framework Desktop using FastFlowLM with the neural processing unit (NPU).
 
+## Other compatible servers
+
+FlowChat is designed and tested with FastFlowLM. Developers and testers may also be able to use it with other servers that provide an OpenAI-compatible API, but those servers have not been tested as part of this project. Set `FASTFLOWLM_BASE_URL` to the server's address, even if the server is not FastFlowLM.
+
+The server must provide a model list and support streaming chat completions. Compatibility also depends on whether it accepts the settings FlowChat sends, including the `think` parameter. FlowChat does not currently provide a way to configure an API key, so it cannot directly connect to endpoints that require one. If you connect to a remote server, your conversations are sent to that server.
+
 ## Features
 
-- Choose from the models available on your FastFlowLM server and save favorites in your browser.
+- Choose from the models available on your model server and save favorites in your browser.
 - Watch replies as they are generated and stop a reply when you need to. If a response is interrupted, its partial text is saved.
 - Edit a message or regenerate a reply, with the option to keep the original conversation as a separate branch.
 - Organize conversations in folders, search their titles, and archive or restore them.
