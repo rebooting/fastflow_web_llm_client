@@ -1,0 +1,10 @@
+.git
+.agents
+.aws
+.codex
+.venv
+node_modules
+dist
+data
+**/__pycache__
+generated_images
