@@ -72,6 +72,14 @@ function readFavorites(): Set<string> {
     }
 }
 let favoriteModels = readFavorites();
+const drawerWidthKey = 'local-chat.settings-width';
+function readDrawerWidth(): number {
+    try {
+        const stored = Number(localStorage.getItem(drawerWidthKey));
+        return Number.isFinite(stored) && stored >= 280 && stored <= 720 ? stored : 345;
+    } catch { return 345; }
+}
+let desiredDrawerWidth = readDrawerWidth();
 const state: {
     chat: Chat | null;
     chats: ChatSummary[];
@@ -114,6 +122,31 @@ function renderNotice() { const e = document.querySelector<HTMLElement>('#notice
 } }
 function settings() { return state.chat?.settings || state.defaults; }
 function locked() { return state.busy || state.saving || !!state.chat?.generating; }
+function drawerBounds() {
+    const sidebarWidth = window.innerWidth > 1000 ? 290 : 0;
+    return { min: 280, max: Math.max(280, Math.min(720, window.innerWidth - sidebarWidth - 400)) };
+}
+function applyDrawerWidth() {
+    const drawer = document.querySelector<HTMLElement>('#drawer');
+    const handle = document.querySelector<HTMLElement>('#drawer-resizer');
+    if (!drawer || !handle) return;
+    const bounds = drawerBounds();
+    const width = Math.round(Math.max(bounds.min, Math.min(bounds.max, desiredDrawerWidth)));
+    drawer.style.setProperty('--settings-width', `${width}px`);
+    handle.hidden = !state.drawer || window.innerWidth <= 760;
+    handle.setAttribute('aria-valuemin', String(bounds.min));
+    handle.setAttribute('aria-valuemax', String(bounds.max));
+    handle.setAttribute('aria-valuenow', String(width));
+    handle.setAttribute('aria-valuetext', `${width} pixels`);
+}
+function setDrawerWidth(width: number, persist = false) {
+    const bounds = drawerBounds();
+    desiredDrawerWidth = Math.round(Math.max(bounds.min, Math.min(bounds.max, width)));
+    applyDrawerWidth();
+    if (persist) {
+        try { localStorage.setItem(drawerWidthKey, String(desiredDrawerWidth)); } catch { /* Width remains for this page. */ }
+    }
+}
 function resizeComposer(input: HTMLTextAreaElement) {
     input.style.height = 'auto';
     const maxHeight = parseFloat(getComputedStyle(input).maxHeight) || 236;
@@ -169,14 +202,15 @@ function expandComposer() {
     editor.setSelectionRange(selectionStart, selectionEnd);
 }
 function layout() {
-    root.innerHTML = `<aside class="sidebar" id="sidebar"><div class="brand">Local Chat <button class="mobile-close icon" data-action="sidebar" aria-label="Close history">×</button></div><button class="new" data-action="new"><span>＋</span> New chat</button><label class="search"><span aria-hidden="true">⌕</span><input id="search" placeholder="Search chats" aria-label="Search chats" value="${esc(state.search)}"></label><div class="tabs"><button data-action="active" class="${!state.archived && !state.folderId ? 'selected' : ''}">Chats</button><button data-action="archived" class="${state.archived ? 'selected' : ''}">Archived</button></div><div class="folders-heading"><span>Folders</span><button data-action="new-folder" aria-label="Create folder" title="Create folder">＋</button></div><nav id="folders" class="folders" aria-label="Chat folders"></nav><div id="history" class="history"></div></aside>
+    root.innerHTML = `<aside class="sidebar" id="sidebar"><div class="brand">Local Chat <button class="mobile-close icon" data-action="sidebar" aria-label="Close history">×</button></div><button class="new" data-action="new"><span>＋</span> New chat</button><label class="search"><span aria-hidden="true">⌕</span><input id="search" placeholder="Search chats" aria-label="Search chats" value="${esc(state.search)}"></label><div class="tabs"><button data-action="active" class="${!state.archived && !state.folderId ? 'selected' : ''}">Chats</button><button data-action="archived" class="${state.archived ? 'selected' : ''}">Archived</button></div><div class="folders-heading"><span>Folders</span><button data-action="new-folder" aria-label="Create folder" title="Create folder">＋</button></div><nav id="folders" class="folders" aria-label="Chat folders"></nav><div id="history" class="history"></div><a class="backup-link" href="/api/backup" download>Download database backup</a></aside>
  <main class="main"><header class="top"><button class="icon mobile-menu" data-action="sidebar" aria-label="Open history">☰</button><h1 id="title"></h1><div class="top-controls"><label class="sr-only" for="model">Model</label><select id="model" aria-label="Model"></select><button class="favorite-model" data-action="favorite-model" aria-label="Favorite selected model" aria-pressed="false" title="Favorite selected model">☆</button><button class="link retry" data-action="retry-models" title="Retry loading models" aria-label="Retry loading models">↻</button><div class="divider"></div><label class="thinking">Thinking <input type="checkbox" id="think"><span class="switch"></span><span id="think-label"></span></label><button class="settings-toggle" data-action="drawer" aria-label="Toggle chat settings" aria-expanded="${state.drawer}">☷</button></div></header><div id="notice" class="notice" role="alert" hidden></div><div id="copy-feedback" class="copy-feedback" role="status" aria-live="polite" hidden></div><div id="model-error" class="model-error" hidden></div><section id="messages" class="messages" aria-live="polite"></section><div class="composer-wrap"><div id="usage-summary" class="usage-summary" aria-live="polite"></div><form id="composer" class="composer"><label class="sr-only" for="prompt">Message</label><textarea id="prompt" rows="1" placeholder="Message your model"></textarea><button type="button" id="expand-composer" data-action="expand-composer" title="Expand message editor" aria-label="Expand message editor">⤢</button><button id="send" title="Send message" aria-label="Send message">➤</button><button type="button" id="stop" data-action="stop" title="Stop generating" aria-label="Stop generating">■</button></form><p class="hint">Enter to send · Shift + Enter for a new line</p></div></main>
- <aside class="drawer ${state.drawer ? '' : 'closed'}" id="drawer"><div class="drawer-head"><h2>Chat settings</h2><button class="icon" data-action="drawer" aria-label="Close chat settings">×</button></div><div id="settings"></div></aside>`;
+ <div id="drawer-resizer" class="drawer-resizer" role="separator" tabindex="0" aria-label="Resize chat settings" aria-orientation="vertical" aria-controls="drawer"></div><aside class="drawer ${state.drawer ? '' : 'closed'}" id="drawer"><div class="drawer-head"><h2>Chat settings</h2><button class="icon" data-action="drawer" aria-label="Close chat settings">×</button></div><div id="settings"></div></aside>`;
     renderHistory();
     renderFolders();
     renderChat();
     renderSettings();
     renderNotice();
+    applyDrawerWidth();
 }
 function renderHistory() {
     const el = document.querySelector<HTMLElement>('#history');
@@ -232,6 +266,7 @@ function renderChat() {
     const prompt = document.querySelector<HTMLTextAreaElement>('#prompt')!;
     prompt.disabled = locked() || !!state.chat?.archived;
     prompt.placeholder = state.chat?.archived ? 'Restore this chat to continue' : current ? `Message ${current}` : 'Choose a model to start';
+    document.querySelector<HTMLFormElement>('#composer')!.classList.toggle('is-generating', state.busy || !!state.chat?.generating);
     document.querySelector<HTMLButtonElement>('#expand-composer')!.disabled = prompt.disabled;
     document.querySelector<HTMLButtonElement>('#send')!.hidden = state.busy || !!state.chat?.generating;
     document.querySelector<HTMLButtonElement>('#send')!.disabled = state.saving || !!state.chat?.archived;
@@ -401,7 +436,8 @@ function renderSettings() {
         return;
     const s = settings();
     const disabled = locked() || !!state.chat?.archived;
-    el.innerHTML = `<p class="drawer-caption">${state.chat ? 'Settings for this conversation' : 'Defaults for new conversations'}</p><label for="preset">System prompt</label><select id="preset" ${disabled ? 'disabled' : ''}><option value="">Choose a preset</option>${state.presets.map(p => `<option value="${esc(p.id)}" ${p.id === state.presetId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select><textarea id="system" rows="6" placeholder="Give your assistant context or instructions…" ${disabled ? 'disabled' : ''}>${esc(s.system_prompt)}</textarea><div class="preset-actions"><button class="outline" data-action="save-preset" ${disabled ? 'disabled' : ''}>Save as preset</button><button class="outline" data-action="edit-preset" ${!state.presetId || disabled ? 'disabled' : ''}>Edit preset</button></div><p class="subtle">Applying a preset copies its prompt into this chat. Later preset edits do not change existing chats.</p><hr><h3>Generation</h3><label for="temperature">Temperature</label><input id="temperature" type="number" min="0" max="2" step="0.1" placeholder="Model default" value="${s.temperature ?? ''}" ${disabled ? 'disabled' : ''}><label for="top_p">Top P</label><input id="top_p" type="number" min="0.01" max="1" step="0.01" placeholder="Model default" value="${s.top_p ?? ''}" ${disabled ? 'disabled' : ''}><label for="max_tokens">Max tokens</label><input id="max_tokens" type="number" min="1" step="1" placeholder="Model default" value="${s.max_tokens ?? ''}" ${disabled ? 'disabled' : ''}><p class="subtle">Leave blank to use the model default.</p>`;
+    el.innerHTML = `<p class="drawer-caption">${state.chat ? 'Settings for this conversation' : 'Defaults for new conversations'}</p><label for="preset">System prompt</label><select id="preset" ${disabled ? 'disabled' : ''}><option value="">Choose a preset</option>${state.presets.map(p => `<option value="${esc(p.id)}" ${p.id === state.presetId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select><textarea id="system" rows="6" placeholder="Give your assistant context or instructions…" ${disabled ? 'disabled' : ''}></textarea><div class="preset-actions"><button class="outline" data-action="save-preset" ${disabled ? 'disabled' : ''}>Save as preset</button><button class="outline" data-action="edit-preset" ${!state.presetId || disabled ? 'disabled' : ''}>Edit preset</button></div><p class="subtle">Applying a preset copies its prompt into this chat. Later preset edits do not change existing chats.</p><hr><h3>Generation</h3><label for="temperature">Temperature</label><input id="temperature" type="number" min="0" max="2" step="0.1" placeholder="Model default" value="${s.temperature ?? ''}" ${disabled ? 'disabled' : ''}><label for="top_p">Top P</label><input id="top_p" type="number" min="0.01" max="1" step="0.01" placeholder="Model default" value="${s.top_p ?? ''}" ${disabled ? 'disabled' : ''}><label for="max_tokens">Max tokens</label><input id="max_tokens" type="number" min="1" step="1" placeholder="Model default" value="${s.max_tokens ?? ''}" ${disabled ? 'disabled' : ''}><p class="subtle">Leave blank to use the model default.</p>`;
+    el.querySelector<HTMLTextAreaElement>('#system')!.value = s.system_prompt;
 }
 let historyRequest = 0;
 async function refreshHistory() { const request = ++historyRequest; const archived = state.archived; const chats = await api<ChatSummary[]>(`/chats?archived=${archived}`); if (request !== historyRequest || archived !== state.archived)
@@ -439,18 +475,53 @@ async function selectChat(id: string) {
         renderSettings();
         renderNotice();
         document.querySelector('#sidebar')?.classList.remove('open');
+        if (chat.generating && state.activeGeneration !== id)
+            void followExternalGeneration(id, nav);
     }
     catch (e) {
         showError(e);
+    }
+}
+async function followExternalGeneration(id: string, nav: number) {
+    let delay = 1200;
+    const errorMessage = 'Could not refresh this reply; retrying.';
+    const stillWatching = () => state.nav === nav && state.chat?.id === id
+        && !!state.chat.generating && state.activeGeneration !== id;
+    while (stillWatching()) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        if (!stillWatching()) return;
+        try {
+            const latest = await api<Chat>(`/chats/${id}`);
+            if (!stillWatching()) return;
+            delay = 1200;
+            if (state.error === errorMessage) { state.error = ''; renderNotice(); }
+            if (!latest.generating) {
+                state.chat = latest;
+                renderChat();
+                renderSettings();
+                await refreshHistory();
+                return;
+            }
+        } catch {
+            if (!stillWatching()) return;
+            if (!state.error) { state.error = errorMessage; renderNotice(); }
+            delay = Math.min(delay * 2, 10000);
+        }
     }
 }
 async function saveSettings(next: Settings) {
     if (state.saving || state.busy)
         return;
     const id = state.chat?.id;
+    if (state.chat) state.chat.settings = next;
+    else state.defaults = next;
     state.saving = true;
     renderChat();
-    renderSettings();
+    // Keep the clicked preset button in the DOM while the textarea's blur
+    // triggers autosave; replacing it here would swallow that click.
+    document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+        '#preset, #system, #temperature, #top_p, #max_tokens'
+    ).forEach(input => { input.disabled = true; });
     try {
         if (id) {
             const updated = await api<Chat>(`/chats/${id}`, { method: 'PATCH', body: body({ settings: next }) });
@@ -467,7 +538,14 @@ async function saveSettings(next: Settings) {
     finally {
         state.saving = false;
         renderChat();
-        renderSettings();
+        const disabled = locked() || !!state.chat?.archived;
+        document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+            '#preset, #system, #temperature, #top_p, #max_tokens'
+        ).forEach(input => { input.disabled = disabled; });
+        const savePreset = document.querySelector<HTMLButtonElement>('[data-action="save-preset"]');
+        const editPreset = document.querySelector<HTMLButtonElement>('[data-action="edit-preset"]');
+        if (savePreset) savePreset.disabled = disabled;
+        if (editPreset) editPreset.disabled = disabled || !state.presetId;
     }
 }
 async function createChat() {
@@ -546,6 +624,50 @@ async function chatAction(action: string, id: string) {
     catch (e) {
         showError(e);
     }
+}
+function editPresetDialog(name: string, promptText: string, creating: boolean): Promise<{ name: string; prompt: string } | null> {
+    return new Promise(resolve => {
+        const dialog = document.createElement('dialog');
+        dialog.className = 'branch-dialog preset-dialog';
+        dialog.setAttribute('aria-labelledby', 'preset-dialog-title');
+        dialog.innerHTML = `<form method="dialog"><div class="preset-dialog-head"><h2 id="preset-dialog-title">${creating ? 'Save preset' : 'Edit preset'}</h2><div class="preset-size-controls"><button type="button" class="outline preset-width-toggle" aria-label="Widen preset editor" aria-pressed="false">Widen</button><button type="button" class="outline preset-height-toggle" aria-label="Make preset editor taller" aria-pressed="false">Taller</button></div></div><label for="preset-name">Name</label><input id="preset-name" required maxlength="200"><label for="preset-prompt">System prompt</label><textarea id="preset-prompt" rows="10"></textarea><div class="dialog-actions"><button value="cancel" class="outline" formnovalidate>Cancel</button><button value="save" class="primary">Save preset</button></div></form>`;
+        document.body.append(dialog);
+        const nameInput = dialog.querySelector<HTMLInputElement>('#preset-name')!;
+        const promptInput = dialog.querySelector<HTMLTextAreaElement>('#preset-prompt')!;
+        const widthToggle = dialog.querySelector<HTMLButtonElement>('.preset-width-toggle')!;
+        const heightToggle = dialog.querySelector<HTMLButtonElement>('.preset-height-toggle')!;
+        nameInput.value = name;
+        promptInput.value = promptText;
+        const updateWidthState = () => {
+            const defaultWidth = Math.min(520, window.innerWidth - 32);
+            const wide = dialog.getBoundingClientRect().width > defaultWidth + 1;
+            widthToggle.setAttribute('aria-pressed', String(wide));
+            widthToggle.textContent = wide ? 'Narrow' : 'Widen';
+            widthToggle.disabled = window.innerWidth <= 552;
+        };
+        widthToggle.addEventListener('click', () => {
+            const wide = widthToggle.getAttribute('aria-pressed') === 'true';
+            dialog.style.width = wide ? '' : 'min(900px, calc(100vw - 32px))';
+            updateWidthState();
+        });
+        heightToggle.addEventListener('click', () => {
+            const tall = heightToggle.getAttribute('aria-pressed') !== 'true';
+            promptInput.style.height = '';
+            dialog.classList.toggle('tall', tall);
+            heightToggle.setAttribute('aria-pressed', String(tall));
+            heightToggle.textContent = tall ? 'Shorter' : 'Taller';
+        });
+        const resizeObserver = new ResizeObserver(updateWidthState);
+        resizeObserver.observe(dialog);
+        dialog.addEventListener('close', () => {
+            const result = dialog.returnValue === 'save' ? {name: nameInput.value, prompt: promptInput.value} : null;
+            resizeObserver.disconnect();
+            dialog.remove();
+            resolve(result);
+        }, {once: true});
+        dialog.showModal();
+        (creating ? nameInput : promptInput).focus();
+    });
 }
 function chooseBranch(action: string, content: string): Promise<{
     content: string;
@@ -685,6 +807,25 @@ async function generate(data: Record<string, unknown>) {
     }
 }
 function bind() {
+    let drag: { id: number; startX: number; width: number } | null = null;
+    root.addEventListener('pointerdown', event => {
+        const handle = (event.target as HTMLElement).closest<HTMLElement>('#drawer-resizer');
+        if (!handle || event.button !== 0 || handle.hidden) return;
+        event.preventDefault();
+        drag = { id: event.pointerId, startX: event.clientX, width: Number(handle.getAttribute('aria-valuenow')) };
+        handle.setPointerCapture(event.pointerId);
+    });
+    root.addEventListener('pointermove', event => {
+        if (drag?.id === event.pointerId) setDrawerWidth(drag.width + drag.startX - event.clientX);
+    });
+    const finishResize = (event: PointerEvent) => {
+        if (drag?.id !== event.pointerId) return;
+        drag = null;
+        setDrawerWidth(desiredDrawerWidth, true);
+    };
+    root.addEventListener('pointerup', finishResize);
+    root.addEventListener('pointercancel', finishResize);
+    window.addEventListener('resize', applyDrawerWidth);
     root.addEventListener('click', async (e) => {
         const target = e.target as HTMLElement;
         const copyButton = target.closest<HTMLElement>('[data-copy]');
@@ -746,6 +887,7 @@ function bind() {
             state.drawer = !state.drawer;
             document.querySelector('#drawer')?.classList.toggle('closed', !state.drawer);
             document.querySelector('[data-action="drawer"]')?.setAttribute('aria-expanded', String(state.drawer));
+            applyDrawerWidth();
         }
         else if (action === 'sidebar')
             document.querySelector('#sidebar')?.classList.toggle('open');
@@ -802,25 +944,17 @@ function bind() {
             if (generatingId)
                 try {
                     await api(`/chats/${generatingId}/cancel`, { method: 'POST' });
-                    if (!state.activeGeneration) {
-                        for (let attempt = 0; attempt < 20; attempt++) {
-                            await new Promise(resolve => setTimeout(resolve, 250));
-                            const chat = await api<Chat>(`/chats/${generatingId}`);
-                            if (state.chat?.id === generatingId) { state.chat = chat; renderChat(); renderSettings(); }
-                            if (!chat.generating) break;
-                        }
-                    }
                 }
                 catch (e) {
                     showError(e);
                 }
         }
         else if (action === 'save-preset') {
-            const name = prompt('Name this preset');
-            if (!name?.trim())
-                return;
+            const text = document.querySelector<HTMLTextAreaElement>('#system')?.value ?? settings().system_prompt;
+            const preset = await editPresetDialog('', text, true);
+            if (!preset) return;
             try {
-                const p = await api<Preset>('/presets', { method: 'POST', body: body({ name, prompt: settings().system_prompt }) });
+                const p = await api<Preset>('/presets', { method: 'POST', body: body(preset) });
                 state.presets.push(p);
                 state.presetId = p.id;
                 renderSettings();
@@ -833,14 +967,10 @@ function bind() {
             const p = state.presets.find(p => p.id === state.presetId);
             if (!p)
                 return;
-            const name = prompt('Preset name', p.name);
-            if (name === null)
-                return;
-            const text = prompt('Preset prompt', p.prompt);
-            if (text === null)
-                return;
+            const preset = await editPresetDialog(p.name, p.prompt, false);
+            if (!preset) return;
             try {
-                const updated = await api<Preset>(`/presets/${p.id}`, { method: 'PUT', body: body({ name, prompt: text }) });
+                const updated = await api<Preset>(`/presets/${p.id}`, { method: 'PUT', body: body(preset) });
                 state.presets = state.presets.map(x => x.id === p.id ? updated : x);
                 renderSettings();
             }
@@ -853,6 +983,12 @@ function bind() {
         state.search = el.value;
         renderHistory();
     } else if (el instanceof HTMLTextAreaElement && el.id === 'prompt') resizeComposer(el); });
+    root.addEventListener('focusout', event => {
+        const input = event.target;
+        if (!(input instanceof HTMLTextAreaElement) || input.id !== 'system') return;
+        if (input.value !== settings().system_prompt)
+            void saveSettings({ ...settings(), system_prompt: input.value });
+    });
     root.addEventListener('change', async (e) => {
         const el = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
         const s = { ...settings() };
@@ -860,8 +996,6 @@ function bind() {
             s.model = el.value;
         else if (el.id === 'think')
             s.think = (el as HTMLInputElement).checked;
-        else if (el.id === 'system')
-            s.system_prompt = el.value;
         else if (el.id === 'preset') {
             state.presetId = el.value;
             const p = state.presets.find(p => p.id === el.value);
@@ -870,6 +1004,8 @@ function bind() {
                 return;
             }
             s.system_prompt = p.prompt;
+            const systemInput = document.querySelector<HTMLTextAreaElement>('#system');
+            if (systemInput) systemInput.value = p.prompt;
         }
         else if (['temperature', 'top_p', 'max_tokens'].includes(el.id)) {
             if (!el.checkValidity()) {
@@ -889,7 +1025,19 @@ function bind() {
         if (!state.chat)
             return;
     } await generate({ action: 'append', content }); });
-    root.addEventListener('keydown', e => { const event = e as KeyboardEvent; if ((event.target as HTMLElement).id === 'prompt' && event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+    root.addEventListener('keydown', e => { const event = e as KeyboardEvent;
+        if ((event.target as HTMLElement).id === 'drawer-resizer') {
+            const bounds = drawerBounds();
+            const width = Number((event.target as HTMLElement).getAttribute('aria-valuenow'));
+            if (event.key === 'ArrowLeft') setDrawerWidth(width + 24, true);
+            else if (event.key === 'ArrowRight') setDrawerWidth(width - 24, true);
+            else if (event.key === 'Home') setDrawerWidth(bounds.min, true);
+            else if (event.key === 'End') setDrawerWidth(bounds.max, true);
+            else return;
+            event.preventDefault();
+            return;
+        }
+        if ((event.target as HTMLElement).id === 'prompt' && event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
         event.preventDefault();
         document.querySelector<HTMLFormElement>('#composer')?.requestSubmit();
     } });

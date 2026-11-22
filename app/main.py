@@ -2,15 +2,19 @@ import asyncio
 import json
 import math
 import os
+import shutil
+import sqlite3
+import tempfile
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, closing
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
@@ -100,6 +104,42 @@ def require_idle(row):
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+class TemporaryBackupResponse(FileResponse):
+    async def __call__(self, scope, receive, send):
+        try:
+            # A pathsend extension may hand a filename off for later use, after
+            # this response returns. Stream the file so cleanup is safe here.
+            extensions = dict(scope.get("extensions", {}))
+            extensions.pop("http.response.pathsend", None)
+            await super().__call__({**scope, "extensions": extensions}, receive, send)
+        finally:
+            shutil.rmtree(Path(self.path).parent, ignore_errors=True)
+
+
+@app.get("/api/backup")
+def download_backup():
+    source_path = (Path(os.getenv("CHAT_DATA_DIR", "data")) / "chat.sqlite3").resolve()
+    directory = Path(tempfile.mkdtemp(prefix="local-chat-backup-"))
+    temporary = directory / "backup.sqlite3"
+    try:
+        # Read-only opening avoids creating or changing the live database; SQLite's
+        # online backup API includes committed pages still held in its WAL.
+        with closing(sqlite3.connect(source_path.as_uri() + "?mode=ro", uri=True, timeout=30)) as source:
+            with closing(sqlite3.connect(temporary, timeout=30)) as destination:
+                source.backup(destination, pages=256, sleep=0.05)
+                destination.execute("PRAGMA journal_mode=DELETE")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        return TemporaryBackupResponse(
+            temporary,
+            media_type="application/vnd.sqlite3",
+            filename=f"local-chat-backup-{timestamp}.sqlite3",
+            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+        )
+    except Exception:
+        shutil.rmtree(directory, ignore_errors=True)
+        raise
 
 
 @app.get("/api/models")

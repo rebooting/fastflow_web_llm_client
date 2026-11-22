@@ -6,12 +6,12 @@ COPY index.html tsconfig.json vite.config.js ./
 COPY src ./src
 RUN npm run build
 
-FROM python:3.12-slim AS runtime
+FROM python:3.12-alpine AS runtime
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 CHAT_DATA_DIR=/data
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt \
-    && useradd --create-home --uid 10001 chat \
+RUN pip install --no-cache-dir --no-compile -r requirements.txt \
+    && adduser -D -u 10001 chat \
     && mkdir /data && chown chat:chat /data
 COPY app ./app
 COPY --from=frontend /build/dist ./dist
